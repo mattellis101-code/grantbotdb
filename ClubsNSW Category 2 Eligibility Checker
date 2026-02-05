@@ -1,0 +1,228 @@
+const clubsNSWEligibility = {
+  title: "ClubsNSW Category 2 Grant Eligibility Check",
+  description: "Quick check to see if you qualify (4 questions)",
+  estimatedTime: "1 minute",
+  
+  questions: [
+    {
+      id: "q1",
+      question: "Are you a local community sporting organization?",
+      type: "radio",
+      required: true,
+      options: [
+        { value: "yes", label: "Yes, we're a sporting organization" },
+        { value: "no_other", label: "No, we're another type of community group" }
+      ],
+      helpText: "This grant is specifically for sporting organizations",
+      scoring: {
+        yes: { points: 1, pass: true },
+        no_other: { points: 0, pass: false, stopHere: true }
+      },
+      failureMessage: {
+        no_other: "ClubsNSW Category 2 grants are specifically for sporting organizations. Other community groups may be eligible for Category 1 or Category 3 grants."
+      }
+    },
+    
+    {
+      id: "q2",
+      question: "Do you have a registered ClubsNSW member club willing to sponsor your application?",
+      type: "radio",
+      required: true,
+      options: [
+        { value: "yes_confirmed", label: "Yes, confirmed" },
+        { value: "yes_likely", label: "Yes, but not yet confirmed" },
+        { value: "no_need_help", label: "No, but I can find one" },
+        { value: "no_cannot", label: "No, and I don't know how to find one" }
+      ],
+      helpText: "You MUST have a ClubsNSW member club sponsor to apply",
+      scoring: {
+        yes_confirmed: { points: 1, pass: true },
+        yes_likely: { points: 0.8, pass: true, showWarning: true },
+        no_need_help: { points: 0.3, pass: true, showWarning: true },
+        no_cannot: { points: 0, pass: true, showWarning: true }
+      },
+      warningMessage: {
+        yes_likely: "You'll need written confirmation from your sponsor club before applying.",
+        no_need_help: "CRITICAL: You must secure a sponsor club before you can apply. Contact local registered clubs in your area.",
+        no_cannot: "CRITICAL: A sponsor club is mandatory. We'll provide resources to help you find one."
+      },
+      guidanceLink: {
+        no_need_help: "https://www.clubsnsw.com.au/find-a-club",
+        no_cannot: "https://www.clubsnsw.com.au/find-a-club",
+        label: "Find ClubsNSW member clubs"
+      }
+    },
+    
+    {
+      id: "q3",
+      question: "What is your requested grant amount?",
+      type: "currency",
+      required: true,
+      max: 10000,
+      placeholder: "Enter amount",
+      helpText: "Category 2 grants are for amounts up to $10,000",
+      scoring: function(value) {
+        if (value <= 10000) {
+          return { 
+            points: 1, 
+            pass: true,
+            message: "Within Category 2 limit"
+          };
+        } else {
+          return { 
+            points: 0, 
+            pass: false, 
+            stopHere: true,
+            message: "Amount exceeds Category 2 limit of $10,000"
+          };
+        }
+      },
+      failureMessage: function(value) {
+        return `Your requested amount ($${value.toLocaleString()}) exceeds the Category 2 limit of $10,000. Consider Category 3 for larger amounts or the Local Sport Grant program.`;
+      }
+    },
+    
+    {
+      id: "q4",
+      question: "What will you use the grant for?",
+      type: "select",
+      required: true,
+      options: [
+        { value: "equipment", label: "Sports equipment" },
+        { value: "uniforms", label: "Uniforms or playing attire" },
+        { value: "minor_facilities", label: "Minor facility improvements (e.g., storage, shade, seating)" },
+        { value: "major_facilities", label: "Major facility construction/renovation" },
+        { value: "operating_costs", label: "Operating costs or administration" },
+        { value: "other", label: "Other" }
+      ],
+      scoring: {
+        equipment: { points: 1, pass: true },
+        uniforms: { points: 1, pass: true },
+        minor_facilities: { points: 1, pass: true },
+        major_facilities: { points: 0, pass: false, stopHere: true },
+        operating_costs: { points: 0, pass: false, stopHere: true },
+        other: { points: 0.5, pass: true, showWarning: true }
+      },
+      failureMessage: {
+        major_facilities: "Category 2 is for equipment, uniforms, and minor improvements only. Major facility projects should apply through Local Sport Grants.",
+        operating_costs: "Operating costs and administration are not eligible. Grants must be for specific equipment, uniforms, or facility improvements."
+      },
+      warningMessage: {
+        other: "Check the grant guidelines to confirm your specific use is eligible before proceeding."
+      }
+    }
+  ],
+  
+  calculateResult: function(answers) {
+    // Similar structure to Local Sport Grant calculator
+    let totalPoints = 0;
+    let maxPoints = 4;
+    let passed = true;
+    let warnings = [];
+    let stopMessages = [];
+    let criticalWarnings = [];
+    
+    answers.forEach(answer => {
+      const question = this.questions.find(q => q.id === answer.questionId);
+      const scoring = typeof question.scoring === 'function' 
+        ? question.scoring(answer.value)
+        : question.scoring[answer.value];
+      
+      totalPoints += scoring.points;
+      
+      if (!scoring.pass) {
+        passed = false;
+        if (scoring.stopHere) {
+          const message = typeof question.failureMessage === 'function'
+            ? question.failureMessage(answer.value)
+            : question.failureMessage[answer.value];
+          stopMessages.push(message);
+        }
+      }
+      
+      if (scoring.showWarning && question.warningMessage) {
+        const warning = {
+          question: question.question,
+          message: question.warningMessage[answer.value] || scoring.message
+        };
+        
+        if (warning.message.includes("CRITICAL")) {
+          criticalWarnings.push(warning);
+        } else {
+          warnings.push(warning);
+        }
+      }
+    });
+    
+    const score = (totalPoints / maxPoints) * 100;
+    
+    return {
+      passed: passed && stopMessages.length === 0,
+      score: Math.round(score),
+      stopMessages: stopMessages,
+      criticalWarnings: criticalWarnings,
+      warnings: warnings,
+      recommendation: this.getRecommendation(score, passed, stopMessages, criticalWarnings)
+    };
+  },
+  
+  getRecommendation: function(score, passed, stopMessages, criticalWarnings) {
+    if (stopMessages.length > 0) {
+      return {
+        status: "not_eligible",
+        title: "Not Eligible for Category 2",
+        message: "Based on your answers, this grant isn't the right fit.",
+        icon: "❌",
+        color: "red",
+        actions: [
+          {
+            label: "Try Local Sport Grant",
+            action: "switch_to_local_sport"
+          }
+        ]
+      };
+    }
+    
+    if (criticalWarnings.length > 0) {
+      return {
+        status: "action_required",
+        title: "Critical Action Required",
+        message: "You must complete these steps before you can apply:",
+        icon: "⚠️",
+        color: "red",
+        criticalActions: criticalWarnings,
+        canProceed: false
+      };
+    }
+    
+    if (score >= 90) {
+      return {
+        status: "ready",
+        title: "You're Ready to Apply!",
+        message: "All requirements met. This should be a straightforward application.",
+        icon: "✅",
+        color: "green",
+        nextStep: "Start Application",
+        estimatedTime: "1-2 hours to complete"
+      };
+    } else if (score >= 70) {
+      return {
+        status: "nearly_ready",
+        title: "Nearly Ready",
+        message: "You're almost there. Address the items below to proceed.",
+        icon: "⚠️",
+        color: "orange",
+        nextStep: "Complete Preparation Steps"
+      };
+    } else {
+      return {
+        status: "needs_preparation",
+        title: "Preparation Needed",
+        message: "Several steps required before you can apply effectively.",
+        icon: "⚠️",
+        color: "orange",
+        nextStep: "Review Requirements"
+      };
+    }
+  }
+};
