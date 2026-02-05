@@ -1,0 +1,135 @@
+-- CLUBS (Reusable profile information)
+TABLE clubs {
+  id: UUID PRIMARY KEY
+  created_at: TIMESTAMP DEFAULT NOW()
+  updated_at: TIMESTAMP
+  
+  -- Legal/Registration
+  legal_name: VARCHAR(200) NOT NULL
+  trading_name: VARCHAR(200)
+  abn: CHAR(11) UNIQUE
+  acn: CHAR(9)
+  incorporation_number: VARCHAR(50)
+  incorporation_state: VARCHAR(3) DEFAULT 'NSW'
+  registration_date: DATE
+  
+  -- Contact
+  primary_contact_name: VARCHAR(100) NOT NULL
+  primary_contact_position: VARCHAR(100)
+  primary_contact_email: VARCHAR(100) NOT NULL
+  primary_contact_phone: VARCHAR(20) NOT NULL
+  secondary_contact_name: VARCHAR(100)
+  secondary_contact_email: VARCHAR(100)
+  
+  -- Location
+  street_address: VARCHAR(200) NOT NULL
+  suburb: VARCHAR(100) NOT NULL
+  postcode: CHAR(4) NOT NULL
+  lga: VARCHAR(100) -- Local Government Area
+  latitude: DECIMAL(10,8)
+  longitude: DECIMAL(11,8)
+  
+  -- Organization Details
+  sport_type: VARCHAR(100) NOT NULL
+  years_established: INTEGER
+  total_members: INTEGER
+  junior_members: INTEGER -- Under 18
+  senior_members: INTEGER
+  volunteer_count: INTEGER
+  
+  -- Financial
+  annual_turnover_range: ENUM('0-25k', '25-50k', '50-100k', '100-250k', '250k+')
+  has_charitable_status: BOOLEAN DEFAULT FALSE
+  
+  -- Compliance
+  insurance_expiry: DATE
+  insurance_amount: DECIMAL(12,2)
+  insurance_provider: VARCHAR(100)
+  
+  user_id: UUID FOREIGN KEY REFERENCES users(id)
+}
+
+-- APPLICATIONS
+TABLE applications {
+  id: UUID PRIMARY KEY
+  club_id: UUID FOREIGN KEY REFERENCES clubs(id)
+  
+  grant_type: ENUM('local_sport_grant', 'clubsnsw_category2') NOT NULL
+  status: ENUM('draft', 'in_progress', 'ready_for_review', 'submitted') DEFAULT 'draft'
+  
+  created_at: TIMESTAMP DEFAULT NOW()
+  updated_at: TIMESTAMP
+  last_saved_at: TIMESTAMP
+  submitted_at: TIMESTAMP
+  
+  -- Progress tracking
+  completion_percentage: INTEGER DEFAULT 0
+  eligibility_passed: BOOLEAN
+  
+  -- Application data (stored as JSONB for flexibility)
+  form_data: JSONB NOT NULL DEFAULT '{}'
+  
+  -- Metadata
+  grant_deadline: DATE
+  grant_amount_requested: DECIMAL(12,2)
+  project_title: VARCHAR(200)
+}
+
+-- DOCUMENTS
+TABLE documents {
+  id: UUID PRIMARY KEY
+  application_id: UUID FOREIGN KEY REFERENCES applications(id)
+  club_id: UUID FOREIGN KEY REFERENCES clubs(id) -- Some docs are reusable
+  
+  document_type: ENUM(
+    'incorporation_cert',
+    'insurance_cert',
+    'financial_statements',
+    'quote',
+    'letter_of_support',
+    'consultation_evidence',
+    'site_plan',
+    'photo',
+    'asset_management_plan',
+    'other'
+  ) NOT NULL
+  
+  file_name: VARCHAR(255) NOT NULL
+  file_size: INTEGER -- bytes
+  mime_type: VARCHAR(100)
+  storage_path: VARCHAR(500) NOT NULL -- S3 path
+  
+  uploaded_at: TIMESTAMP DEFAULT NOW()
+  expiry_date: DATE -- For insurance, incorporation certs
+  
+  is_reusable: BOOLEAN DEFAULT FALSE -- Can be used across applications
+  metadata: JSONB -- Additional info like quote amount, issuer, etc.
+}
+
+-- USERS (Simple authentication)
+TABLE users {
+  id: UUID PRIMARY KEY
+  email: VARCHAR(100) UNIQUE NOT NULL
+  password_hash: VARCHAR(255) NOT NULL
+  full_name: VARCHAR(100) NOT NULL
+  
+  created_at: TIMESTAMP DEFAULT NOW()
+  last_login: TIMESTAMP
+  email_verified: BOOLEAN DEFAULT FALSE
+  
+  role: ENUM('club_admin', 'applicant') DEFAULT 'applicant'
+}
+
+-- TEMPLATES
+TABLE templates {
+  id: UUID PRIMARY KEY
+  grant_type: ENUM('local_sport_grant', 'clubsnsw_category2') NOT NULL
+  template_type: ENUM('project_summary', 'community_benefit', 'impact_statement')
+  
+  title: VARCHAR(200) NOT NULL
+  content: TEXT NOT NULL
+  sport_category: VARCHAR(100) -- Optional: specific to certain sports
+  
+  is_active: BOOLEAN DEFAULT TRUE
+  usage_count: INTEGER DEFAULT 0
+}
