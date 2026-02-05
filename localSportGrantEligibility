@@ -1,0 +1,233 @@
+const localSportGrantEligibility = {
+  title: "Local Sport Grant Eligibility Check",
+  description: "Answer 5 quick questions to see if your club qualifies",
+  estimatedTime: "2 minutes",
+  
+  questions: [
+    {
+      id: "q1",
+      question: "Is your club an incorporated not-for-profit organization?",
+      type: "radio",
+      required: true,
+      options: [
+        { value: "yes", label: "Yes, we are incorporated and not-for-profit" },
+        { value: "no", label: "No, we are not incorporated" },
+        { value: "unsure", label: "I'm not sure" }
+      ],
+      helpText: "Incorporated clubs have an ABN/ACN and are registered with Fair Trading NSW",
+      scoring: {
+        yes: { points: 1, pass: true },
+        no: { points: 0, pass: false, stopHere: true },
+        unsure: { points: 0, pass: false, showGuidance: true }
+      },
+      failureMessage: {
+        no: "Unfortunately, only incorporated not-for-profit organizations are eligible for Local Sport Grants. You'll need to incorporate your club first.",
+        unsure: "You'll need to confirm your incorporation status. Check if you have an ABN and incorporation certificate from Fair Trading NSW."
+      },
+      guidanceLink: {
+        unsure: "https://www.fairtrading.nsw.gov.au/associations-and-co-operatives/incorporated-associations",
+        label: "Learn about incorporation"
+      }
+    },
+    
+    {
+      id: "q2",
+      question: "Is your club located in New South Wales?",
+      type: "radio",
+      required: true,
+      options: [
+        { value: "yes", label: "Yes, in NSW" },
+        { value: "no", label: "No, in another state/territory" }
+      ],
+      scoring: {
+        yes: { points: 1, pass: true },
+        no: { points: 0, pass: false, stopHere: true }
+      },
+      failureMessage: {
+        no: "This grant is only available to NSW-based clubs. Check with your state/territory government for local sport grant programs."
+      }
+    },
+    
+    {
+      id: "q3",
+      question: "What type of project are you planning?",
+      type: "select",
+      required: true,
+      options: [
+        { value: "equipment", label: "Sports equipment purchase" },
+        { value: "facilities_new", label: "New facility construction" },
+        { value: "facilities_upgrade", label: "Facility upgrade or improvement" },
+        { value: "facilities_repair", label: "Facility repairs or maintenance" },
+        { value: "programs", label: "Program development or delivery" },
+        { value: "other", label: "Other" }
+      ],
+      scoring: {
+        equipment: { points: 1, pass: true },
+        facilities_new: { points: 1, pass: true },
+        facilities_upgrade: { points: 1, pass: true },
+        facilities_repair: { points: 0.5, pass: true, showWarning: true },
+        programs: { points: 0.5, pass: true, showWarning: true },
+        other: { points: 0, pass: true, showWarning: true }
+      },
+      warningMessage: {
+        facilities_repair: "Routine maintenance is generally not funded. Your project must involve significant improvement or upgrade work.",
+        programs: "Program funding is available but is competitive. Ensure your program demonstrates clear community benefit.",
+        other: "Check the grant guidelines to confirm your project type is eligible before proceeding."
+      }
+    },
+    
+    {
+      id: "q4",
+      question: "What is your estimated total project cost?",
+      type: "currency",
+      required: true,
+      min: 0,
+      placeholder: "Enter amount",
+      helpText: "Include all costs: materials, labor, equipment, etc.",
+      scoring: function(value) {
+        if (value < 2000) {
+          return { 
+            points: 0.3, 
+            pass: true, 
+            showWarning: true,
+            message: "Very small projects may be better suited to ClubsNSW or local council grants."
+          };
+        } else if (value >= 2000 && value <= 100000) {
+          return { 
+            points: 1, 
+            pass: true,
+            message: "Good project size for Local Sport Grants."
+          };
+        } else {
+          return { 
+            points: 1, 
+            pass: true, 
+            showWarning: true,
+            message: "Larger projects require more detailed planning and may need to demonstrate higher community benefit."
+          };
+        }
+      }
+    },
+    
+    {
+      id: "q5",
+      question: "Have you consulted with your community about this project?",
+      type: "radio",
+      required: true,
+      options: [
+        { value: "yes_evidence", label: "Yes, and we have evidence (surveys, meeting notes, etc.)" },
+        { value: "yes_no_evidence", label: "Yes, but we don't have formal evidence" },
+        { value: "no_can_do", label: "Not yet, but we can conduct consultation" },
+        { value: "no_cannot", label: "No, and we cannot conduct consultation" }
+      ],
+      helpText: "Community consultation demonstrates need and support for your project",
+      scoring: {
+        yes_evidence: { points: 1, pass: true },
+        yes_no_evidence: { points: 0.7, pass: true, showWarning: true },
+        no_can_do: { points: 0.5, pass: true, showWarning: true },
+        no_cannot: { points: 0.2, pass: true, showWarning: true }
+      },
+      warningMessage: {
+        yes_no_evidence: "You should gather formal evidence (surveys, meeting minutes) before applying to strengthen your application.",
+        no_can_do: "You'll need to conduct and document community consultation before submitting your application.",
+        no_cannot: "Applications without community consultation evidence are unlikely to succeed. Consider how you can demonstrate community support."
+      }
+    }
+  ],
+  
+  // Result calculation
+  calculateResult: function(answers) {
+    let totalPoints = 0;
+    let maxPoints = 5;
+    let passed = true;
+    let warnings = [];
+    let stopMessages = [];
+    
+    answers.forEach(answer => {
+      const question = this.questions.find(q => q.id === answer.questionId);
+      const scoring = typeof question.scoring === 'function' 
+        ? question.scoring(answer.value)
+        : question.scoring[answer.value];
+      
+      totalPoints += scoring.points;
+      
+      if (!scoring.pass) {
+        passed = false;
+        if (scoring.stopHere && question.failureMessage) {
+          stopMessages.push(question.failureMessage[answer.value]);
+        }
+      }
+      
+      if (scoring.showWarning && question.warningMessage) {
+        warnings.push({
+          question: question.question,
+          message: question.warningMessage[answer.value] || scoring.message
+        });
+      }
+    });
+    
+    const score = (totalPoints / maxPoints) * 100;
+    
+    return {
+      passed: passed && stopMessages.length === 0,
+      score: Math.round(score),
+      stopMessages: stopMessages,
+      warnings: warnings,
+      recommendation: this.getRecommendation(score, passed, stopMessages)
+    };
+  },
+  
+  getRecommendation: function(score, passed, stopMessages) {
+    if (stopMessages.length > 0) {
+      return {
+        status: "not_eligible",
+        title: "Not Eligible",
+        message: "Based on your answers, your club is not currently eligible for this grant.",
+        icon: "❌",
+        color: "red",
+        actions: [
+          {
+            label: "View Requirements",
+            action: "show_requirements"
+          },
+          {
+            label: "Try ClubsNSW Grant",
+            action: "switch_to_clubsnsw"
+          }
+        ]
+      };
+    }
+    
+    if (score >= 80) {
+      return {
+        status: "highly_eligible",
+        title: "Great News! You're Highly Eligible",
+        message: "Your club appears to meet all the key criteria. You're ready to start your application.",
+        icon: "✅",
+        color: "green",
+        nextStep: "Start Application",
+        estimatedTime: "2-3 hours to complete"
+      };
+    } else if (score >= 60) {
+      return {
+        status: "eligible_with_preparation",
+        title: "Eligible - Some Preparation Needed",
+        message: "You're eligible, but should address some areas to strengthen your application.",
+        icon: "⚠️",
+        color: "orange",
+        nextStep: "Review Warnings Below",
+        actionRequired: true
+      };
+    } else {
+      return {
+        status: "marginal",
+        title: "Marginal Eligibility",
+        message: "You may be eligible, but significant preparation is needed for a competitive application.",
+        icon: "⚠️",
+        color: "orange",
+        nextStep: "Review All Warnings",
+        actionRequired: true
+      };
+    }
+  }
+};
